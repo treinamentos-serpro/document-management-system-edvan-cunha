@@ -1,24 +1,34 @@
-// Seed do servidor backend do Document Management System.
-//
-// Este arquivo é apenas um ponto de partida mínimo. Ao longo do workshop você
-// vai usar o Agent Mode do GitHub Copilot para construir as camadas:
-//   - routes/       (definição das rotas)
-//   - controllers/  (entrada HTTP e validação)
-//   - services/     (regras de negócio)
-//   - repositories/ (persistência: arquivos locais + metadados em memória)
-//
-// Restrição do projeto: uploads são gravados no filesystem local da aplicação
-// usando multer com diskStorage. Não utilize provedores externos.
-
 const express = require('express');
+const path = require('node:path');
+const createDocumentController = require('./controllers/documentController');
+const createDocumentRepository = require('./repositories/documentRepository');
+const createFileRepository = require('./repositories/fileRepository');
+const createDocumentRoutes = require('./routes/documentRoutes');
+const createDocumentService = require('./services/documentService');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const configuredFileSize = Number(process.env.MAX_FILE_SIZE_BYTES);
+const maxFileSizeBytes = Number.isSafeInteger(configuredFileSize) && configuredFileSize > 0
+  ? configuredFileSize
+  : 10 * 1024 * 1024;
+const storageDirectory = path.resolve(__dirname, '../storage');
+const documentRepository = createDocumentRepository();
+const fileRepository = createFileRepository(storageDirectory);
+const documentService = createDocumentService({
+  documentRepository,
+  fileRepository,
+  owner: process.env.DMS_DEFAULT_OWNER || 'default',
+});
+const documentController = createDocumentController(documentService);
 
 app.use(express.json());
+app.use(createDocumentRoutes({
+  controller: documentController,
+  storageDirectory,
+  maxFileSizeBytes,
+}));
 
-// Endpoint de verificação de saúde. As demais rotas (/upload, /documents,
-// /documents/:id/download) serão implementadas durante o Passo 2.
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
