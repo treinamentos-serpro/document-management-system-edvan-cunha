@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { downloadDocument } from '../services/documentApi.js';
 
-export default function DownloadButton({ documentItem }) {
+export default function DownloadButton({ apiToken, documentItem }) {
   const [isDownloading, setIsDownloading] = useState(false);
   const [error, setError] = useState('');
 
@@ -10,7 +10,7 @@ export default function DownloadButton({ documentItem }) {
     setError('');
 
     try {
-      const blob = await downloadDocument(documentItem.id);
+      const blob = await downloadDocument(documentItem.id, apiToken);
       const objectUrl = URL.createObjectURL(blob);
       const link = window.document.createElement('a');
       link.href = objectUrl;

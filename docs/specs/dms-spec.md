@@ -18,7 +18,7 @@ Permitir que um usuário envie, liste e baixe documentos armazenados no filesyst
 
 - Armazenamento em nuvem ou em serviços externos.
 - Banco de dados para metadados.
-- Autenticação, cadastro de usuários e autorização multiusuário.
+- Cadastro de usuários e autorização multiusuário.
 - Exclusão, versionamento, edição ou compartilhamento de documentos.
 - Paginação e busca avançada.
 
@@ -50,6 +50,8 @@ Permitir que um usuário envie, liste e baixe documentos armazenados no filesyst
 | RNF-06 | O download deve ser enviado como anexo, sem expor o caminho interno de armazenamento. |
 | RNF-07 | Erros esperados devem usar respostas consistentes em JSON; downloads bem-sucedidos retornam conteúdo binário. |
 | RNF-08 | O limite de upload deve ser configurável; o valor padrão do MVP é 10 MiB. |
+| RNF-09 | Em produção, a API de documentos deve exigir `DMS_API_TOKEN`; em desenvolvimento local, o token pode ser omitido. |
+| RNF-10 | O armazenamento deve respeitar limites configuráveis de bytes totais e quantidade de arquivos. |
 
 ## 5. Modelo de dados
 
@@ -62,7 +64,7 @@ Permitir que um usuário envie, liste e baixe documentos armazenados no filesyst
 | `size` | number | Tamanho do arquivo em bytes. |
 | `uploadedAt` | string | Data e hora do upload em ISO 8601 UTC. |
 | `owner` | string | Identificador lógico do usuário ativo. |
-| `mimeType` | string | Tipo MIME informado/detectado para o arquivo; usar `application/octet-stream` como fallback. |
+| `mimeType` | string | Tipo seguro para resposta HTTP; o MVP registra `application/octet-stream`, pois o MIME informado pelo cliente não é confiável. |
 
 ### Dados internos de persistência
 
@@ -74,9 +76,9 @@ Os metadados são mantidos em memória pelo processo. Após reinício, os arquiv
 
 ## 6. Identidade do usuário no MVP
 
-O seed não define autenticação nem um mecanismo de identidade. Para manter o escopo explícito, o MVP considera um único usuário lógico, identificado pela variável `DMS_DEFAULT_OWNER`, com valor padrão `default`.
+O MVP considera um único usuário lógico, identificado pela variável `DMS_DEFAULT_OWNER`, com valor padrão `default`. Quando `DMS_API_TOKEN` está configurado, os endpoints de documentos exigem esse token como Bearer token. A interface solicita a chave e a mantém apenas em memória durante a sessão; ela não é incluída no bundle nem persistida no navegador. Em `NODE_ENV=production`, a aplicação não inicia sem um `DMS_API_TOKEN` com pelo menos 32 caracteres.
 
-O cliente não pode definir `owner` no corpo, query string ou nome do arquivo. Todos os endpoints aplicam o mesmo usuário lógico configurado. Autenticação e isolamento entre usuários ficam fora do escopo desta versão.
+O token é uma chave compartilhada para o único usuário lógico, não um sistema de contas nem uma identidade individual. O cliente não pode definir `owner` no corpo, query string ou nome do arquivo. Cadastro e isolamento multiusuário continuam fora do escopo desta versão. Em produção, o token deve ser forte, mantido fora do repositório e transmitido exclusivamente por HTTPS.
 
 ## 7. Contratos de API
 
@@ -114,6 +116,8 @@ Envia um documento.
 
 - `400 Bad Request`: arquivo ausente ou mais de um arquivo.
 - `413 Payload Too Large`: arquivo acima do limite configurado.
+- `413 Payload Too Large`: limite total de bytes ou quantidade de documentos atingido.
+- `401 Unauthorized`: token ausente ou inválido quando `DMS_API_TOKEN` está configurado.
 - `500 Internal Server Error`: falha de armazenamento ou registro dos metadados.
 
 ### `GET /api/documents`
@@ -179,9 +183,12 @@ Os códigos e mensagens devem ser estáveis o bastante para o frontend tratar os
 | --- | --- | --- |
 | `PORT` | `3000` | Porta HTTP do backend. |
 | `MAX_FILE_SIZE_BYTES` | `10485760` | Limite máximo por arquivo, em bytes. |
+| `MAX_TOTAL_STORAGE_BYTES` | `1073741824` | Limite de bytes ocupados por arquivos no diretório de armazenamento, incluindo arquivos órfãos. |
+| `MAX_DOCUMENT_COUNT` | `1000` | Limite de arquivos regulares no diretório de armazenamento, incluindo arquivos órfãos. |
 | `DMS_DEFAULT_OWNER` | `default` | Identificador lógico do usuário único do MVP. |
+| `DMS_API_TOKEN` | Não definido em desenvolvimento; obrigatório em produção, com pelo menos 32 caracteres. | Chave Bearer compartilhada para proteger os endpoints de documentos. |
 
-O diretório de armazenamento padrão é `backend/storage`. A aplicação não deve enviar arquivos a provedores externos nem transformar o armazenamento em um serviço remoto.
+O diretório de armazenamento padrão é `backend/storage`, com permissões restritas no filesystem quando suportadas. Os limites agregados incluem arquivos preexistentes e órfãos para não serem zerados pelo reinício, mas os metadados correspondentes continuam indisponíveis após reinício. A aplicação não deve enviar arquivos a provedores externos nem transformar o armazenamento em um serviço remoto.
 
 ## 9. Decisões arquiteturais
 
@@ -190,8 +197,13 @@ O diretório de armazenamento padrão é `backend/storage`. A aplicação não d
 - `services/` concentra regras de negócio, como associação ao usuário ativo e ordenação da listagem.
 - `repositories/` coordena os metadados em memória e o acesso aos arquivos locais.
 - `multer` com `diskStorage` grava o arquivo; o nome interno é gerado pelo servidor.
+- As requisições multipart aceitam um único arquivo e rejeitam campos textuais adicionais.
 - A API expõe metadados, nunca o caminho ou a chave interna do arquivo.
-- O usuário do MVP é configurado no servidor; o cliente não escolhe o proprietário do documento.
+- O token compartilhado protege a API em produção, mas não representa autenticação ou isolamento multiusuário.
+- O caminho de arquivos é validado lexicalmente e após resolução de links simbólicos; somente chaves UUID geradas pelo servidor são aceitas.
+- O MIME enviado pelo cliente não é reutilizado como `Content-Type` do download; a resposta usa `application/octet-stream`.
+- Cada requisição recebe um identificador de correlação retornado em `X-Request-Id`; falhas internas são registradas sem nomes de arquivos, caminhos ou conteúdo.
+- O armazenamento tem limites configuráveis de bytes totais e quantidade de arquivos.
 - Os metadados são voláteis. Não há reconstrução do catálogo a partir dos arquivos no reinício.
 
 ## 10. Plano de execução

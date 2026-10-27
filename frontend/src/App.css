@@ -1,7 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap');
-
 :root {
-  font-family: 'DM Sans', 'Segoe UI', sans-serif;
+  font-family: 'Aptos', 'Segoe UI', sans-serif;
   color: #1d2925;
   background: #f3f5f0;
   font-synthesis: none;
@@ -16,8 +14,8 @@
   --paper: #fbfcf9;
   --accent: #d8ee72;
   --coral: #bd5c43;
-  --mono: 'DM Mono', monospace;
-  --serif: 'Fraunces', Georgia, serif;
+  --mono: ui-monospace, 'Cascadia Code', monospace;
+  --serif: Georgia, serif;
 }
 
 * {
@@ -45,7 +43,7 @@ button {
 
 button:focus-visible,
 a:focus-visible,
-input:focus-visible + .upload-dropzone {
+.upload-dropzone:focus-within {
   outline: 3px solid #819b2e;
   outline-offset: 3px;
 }
@@ -55,6 +53,45 @@ input:focus-visible + .upload-dropzone {
   min-height: 100vh;
   margin: 0 auto;
   padding: 0 0 28px;
+}
+
+.access-panel {
+  width: min(100%, 430px);
+  margin: clamp(72px, 16vh, 150px) auto 0;
+  padding: 32px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+}
+
+.access-panel h1 {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 34px;
+  font-weight: 500;
+}
+
+.access-copy {
+  margin: 12px 0 24px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.access-form {
+  display: grid;
+  gap: 12px;
+}
+
+.access-form label {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.access-form input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  background: white;
 }
 
 .topbar {

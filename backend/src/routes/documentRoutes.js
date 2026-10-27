@@ -1,38 +1,47 @@
 const crypto = require('node:crypto');
-const fs = require('node:fs');
 const express = require('express');
 const multer = require('multer');
+const createUploadMiddleware = require('../middlewares/uploadMiddleware');
+const logApiError = require('../utils/logApiError');
 
-function createDocumentRoutes({ controller, storageDirectory, maxFileSizeBytes }) {
+function createDocumentRoutes({ apiToken, controller, storageDirectory, maxFileSizeBytes }) {
   const router = express.Router();
-  const storage = multer.diskStorage({
-    destination: (req, file, callback) => {
-      fs.mkdir(storageDirectory, { recursive: true }, (error) => {
-        callback(error, storageDirectory);
-      });
-    },
-    filename: (req, file, callback) => {
-      callback(null, crypto.randomUUID());
-    },
-  });
-  const upload = multer({
-    storage,
-    limits: {
-      fileSize: maxFileSizeBytes,
-      files: 1,
-    },
-  });
+  const upload = createUploadMiddleware({ storageDirectory, maxFileSizeBytes });
 
-  router.post('/upload', upload.single('file'), controller.upload);
-  router.get('/documents', controller.list);
-  router.get('/documents/:id/download', controller.download);
+  function authenticate(req, res, next) {
+    if (!apiToken) {
+      return next();
+    }
+
+    const authorization = req.get('authorization') || '';
+    const match = authorization.match(/^Bearer ([^\s]+)$/i);
+    const expectedToken = Buffer.from(apiToken);
+    const providedToken = Buffer.from(match?.[1] || '');
+    const isValid = providedToken.length === expectedToken.length
+      && crypto.timingSafeEqual(providedToken, expectedToken);
+
+    if (!isValid) {
+      return res.status(401).json({
+        error: {
+          code: 'UNAUTHORIZED',
+          message: 'Acesso não autorizado.',
+        },
+      });
+    }
+
+    return next();
+  }
+
+  router.post('/upload', authenticate, upload, controller.upload);
+  router.get('/documents', authenticate, controller.list);
+  router.get('/documents/:id/download', authenticate, controller.download);
 
   router.use((error, req, res, next) => {
     if (error instanceof multer.MulterError) {
       const tooLarge = error.code === 'LIMIT_FILE_SIZE';
       return res.status(tooLarge ? 413 : 400).json({
         error: {
-          code: tooLarge ? 'FILE_TOO_LARGE' : 'INVALID_UPLOAD',
+          code: tooLarge ? 'FILE_TOO_LARGE' : error.code || 'INVALID_UPLOAD',
           message: tooLarge
             ? 'O arquivo excede o limite permitido.'
             : 'A requisição de upload é inválida.',
@@ -40,6 +49,20 @@ function createDocumentRoutes({ controller, storageDirectory, maxFileSizeBytes }
       });
     }
 
+    if (error.code === 'STORAGE_LIMIT_EXCEEDED') {
+      if (error.cleanupError) {
+        logApiError(req, error, 'upload_cleanup_failed', '/upload');
+      }
+
+      return res.status(413).json({
+        error: {
+          code: error.code,
+          message: 'O limite total de armazenamento foi atingido.',
+        },
+      });
+    }
+
+    logApiError(req, error, 'request_failed');
     if (res.headersSent) {
       return next(error);
     }
