@@ -1,3 +1,5 @@
+const logApiError = require('../utils/logApiError');
+
 function createDocumentController(documentService) {
   return {
     upload: async (req, res) => {
@@ -30,12 +32,13 @@ function createDocumentController(documentService) {
         });
       }
 
-      res.type(download.mimeType);
+      res.type('application/octet-stream');
       return res.download(download.filePath, download.originalName, (error) => {
         if (!error) {
           return;
         }
 
+        logApiError(req, error, 'download_failed', '/documents/:id/download');
         if (res.headersSent) {
           res.destroy(error);
           return;

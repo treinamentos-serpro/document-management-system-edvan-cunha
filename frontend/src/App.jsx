@@ -10,6 +10,10 @@ export default function App() {
   const [loadError, setLoadError] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
   const [notice, setNotice] = useState('');
+  const [apiToken, setApiToken] = useState('');
+  const [tokenInput, setTokenInput] = useState('');
+  const [authRequired, setAuthRequired] = useState(false);
+  const [authError, setAuthError] = useState('');
 
   useEffect(() => {
     const controller = new AbortController();
@@ -17,10 +21,17 @@ export default function App() {
     setIsLoading(true);
     setLoadError('');
 
-    listDocuments({ signal: controller.signal })
-      .then(setDocuments)
+    listDocuments({ signal: controller.signal, token: apiToken })
+      .then((nextDocuments) => {
+        setDocuments(nextDocuments);
+        setAuthRequired(false);
+        setAuthError('');
+      })
       .catch((error) => {
-        if (error.name !== 'AbortError') {
+        if (error.status === 401) {
+          setAuthRequired(true);
+          setAuthError(apiToken ? 'A chave de acesso não foi reconhecida.' : '');
+        } else if (error.name !== 'AbortError') {
           setLoadError(error.message);
         }
       })
@@ -31,11 +42,56 @@ export default function App() {
       });
 
     return () => controller.abort();
-  }, [refreshKey]);
+  }, [apiToken, refreshKey]);
+
+  function handleAccessSubmit(event) {
+    event.preventDefault();
+    if (!tokenInput.trim()) {
+      return;
+    }
+
+    setApiToken(tokenInput.trim());
+    setTokenInput('');
+    setAuthError('');
+    setRefreshKey((currentKey) => currentKey + 1);
+  }
 
   function handleUpload(document) {
     setNotice(`${document.originalName} foi enviado.`);
     setRefreshKey((currentKey) => currentKey + 1);
+  }
+
+  if (authRequired) {
+    return (
+      <main className="app-shell access-shell">
+        <header className="topbar">
+          <a className="brand" href="/" aria-label="Documentos, início">
+            <span className="brand-mark" aria-hidden="true">D</span>
+            <span>Documentos</span>
+          </a>
+          <div className="storage-status">ACESSO RESTRITO</div>
+        </header>
+        <section className="access-panel" aria-labelledby="access-title">
+          <p className="eyebrow">BIBLIOTECA <span>/</span> ACESSO</p>
+          <h1 id="access-title">Chave de acesso<span className="heading-period">.</span></h1>
+          <p className="access-copy">Informe a chave configurada para este servidor.</p>
+          <form className="access-form" onSubmit={handleAccessSubmit}>
+            <label htmlFor="api-token">Chave de acesso</label>
+            <input
+              autoComplete="off"
+              id="api-token"
+              name="apiToken"
+              type="password"
+              value={tokenInput}
+              onChange={(event) => setTokenInput(event.target.value)}
+              required
+            />
+            {authError && <p className="form-error" role="alert">{authError}</p>}
+            <button className="upload-submit" type="submit">Acessar documentos</button>
+          </form>
+        </section>
+      </main>
+    );
   }
 
   return (
@@ -70,6 +126,7 @@ export default function App() {
             documents={documents}
             isLoading={isLoading}
             error={loadError}
+            apiToken={apiToken}
             onRefresh={() => setRefreshKey((currentKey) => currentKey + 1)}
           />
         </section>
@@ -79,7 +136,7 @@ export default function App() {
             <p className="eyebrow">01 <span>/</span> NOVO ENVIO</p>
             <h2 id="upload-title">Adicionar arquivo</h2>
           </div>
-          <UploadComponent onUploaded={handleUpload} />
+          <UploadComponent apiToken={apiToken} onUploaded={handleUpload} />
           <p className="local-note">
             <span aria-hidden="true">●</span>
             Arquivo salvo neste servidor

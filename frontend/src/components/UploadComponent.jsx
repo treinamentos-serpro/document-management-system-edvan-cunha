@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { uploadDocument } from '../services/documentApi.js';
 import { formatFileSize } from '../utils/formatFileSize.js';
 
-export default function UploadComponent({ onUploaded }) {
+export default function UploadComponent({ apiToken, onUploaded }) {
   const [selectedFile, setSelectedFile] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState('');
@@ -18,7 +18,7 @@ export default function UploadComponent({ onUploaded }) {
     setError('');
 
     try {
-      const document = await uploadDocument(selectedFile);
+      const document = await uploadDocument(selectedFile, apiToken);
       onUploaded(document);
       setSelectedFile(null);
       fileInputRef.current.value = '';

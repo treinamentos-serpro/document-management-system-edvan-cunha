@@ -1,29 +1,35 @@
-const crypto = require('node:crypto');
-const path = require('node:path');
+const {
+  createDocumentRecord,
+  toDownloadDetails,
+  toPublicDocument,
+} = require('./documentMapper');
 
-function toPublicDocument(document) {
-  const { storageKey, ...publicDocument } = document;
-  return publicDocument;
-}
-
-function createDocumentService({ documentRepository, fileRepository, owner }) {
+function createDocumentService({
+  documentRepository,
+  fileRepository,
+  maxDocumentCount,
+  maxTotalStorageBytes,
+  owner,
+}) {
   return {
     async createDocument(uploadedFile) {
-      const originalName = path.basename(uploadedFile.originalname.replace(/\\/g, '/')) || 'document';
-      const document = {
-        id: crypto.randomUUID(),
-        originalName,
-        size: uploadedFile.size,
-        uploadedAt: new Date().toISOString(),
-        owner,
-        mimeType: uploadedFile.mimetype || 'application/octet-stream',
-        storageKey: uploadedFile.filename,
-      };
+      const document = createDocumentRecord(uploadedFile, owner);
 
       try {
+        const usage = await fileRepository.getUsage();
+        if (usage.fileCount > maxDocumentCount || usage.totalBytes > maxTotalStorageBytes) {
+          const error = new Error('Document storage limit exceeded.');
+          error.code = 'STORAGE_LIMIT_EXCEEDED';
+          throw error;
+        }
+
         await documentRepository.save(document);
       } catch (error) {
-        await fileRepository.remove(document.storageKey).catch(() => {});
+        try {
+          await fileRepository.remove(document.storageKey);
+        } catch (cleanupError) {
+          error.cleanupError = cleanupError;
+        }
         throw error;
       }
 
@@ -43,11 +49,8 @@ function createDocumentService({ documentRepository, fileRepository, owner }) {
         return null;
       }
 
-      return {
-        filePath: fileRepository.getStoragePath(document.storageKey),
-        originalName: document.originalName,
-        mimeType: document.mimeType,
-      };
+      const filePath = await fileRepository.getStoragePath(document.storageKey);
+      return toDownloadDetails(document, filePath);
     },
   };
 }

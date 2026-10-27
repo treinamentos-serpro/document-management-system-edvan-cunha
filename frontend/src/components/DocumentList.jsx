@@ -15,7 +15,7 @@ function getFileLabel(fileName) {
     : 'FILE';
 }
 
-export default function DocumentList({ documents, isLoading, error, onRefresh }) {
+export default function DocumentList({ apiToken, documents, isLoading, error, onRefresh }) {
   return (
     <>
       <div className="library-heading">
@@ -62,7 +62,7 @@ export default function DocumentList({ documents, isLoading, error, onRefresh })
                   {formatFileSize(documentItem.size)} <span aria-hidden="true">·</span> {formatUploadedAt(documentItem.uploadedAt)}
                 </span>
               </span>
-              <DownloadButton documentItem={documentItem} />
+              <DownloadButton apiToken={apiToken} documentItem={documentItem} />
             </li>
           ))}
         </ul>
